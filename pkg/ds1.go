@@ -25,8 +25,8 @@ type DS1 struct {
 	SubstitutionGroupsNum      int32               // SubstitutionGroupsNum number of substitution groups, datas between objects & NPC paths
 }
 
-// LoadDS1 loads the specified DS1 file
-func LoadDS1(fileData []byte) (ds1 *DS1, err error) {
+// FromBytes loads the specified DS1 file
+func FromBytes(fileData []byte) (ds1 *DS1, err error) {
 	stream := bitstream.NewReader().FromBytes(fileData...)
 
 	ds1 = &DS1{
