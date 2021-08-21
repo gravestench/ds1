@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	"github.com/gravestench/bitstream"
+	"github.com/OpenDiablo2/bitstream"
 	"github.com/gravestench/mathlib"
 )
 
