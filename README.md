@@ -1,7 +1,7 @@
 <!-- PROJECT LOGO -->
 <h1 align="center">DS1</h1>
 <p align="center">
-  Package for transcoding DS1 tileset files found 
+  Package for transcoding DS1 map-stamp files found 
   <br />
   inside Diablo 2 MPQ archives, representing tilesets.
   <br />
@@ -16,8 +16,7 @@
 
 The DS1 Transcoder package provides a Go implementation for handling DS1 files, 
 which represent "stamp" data used to construct maps within Diablo 2 MPQ 
-archives. This package is designed to efficiently work with DS1 tileset files 
-and includes support for both reading and decoding them.
+archives. This package is designed to efficiently work with DS1 map-stamp files.
 
 ## Project Structure
 * `pkg/` - This directory contains the core DS1 transcoder library. This is the 
