@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	"github.com/OpenDiablo2/bitstream"
+	"github.com/gravestench/bitstream"
 	"github.com/gravestench/mathlib"
 )
 
@@ -305,7 +305,6 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
 		}
 
 		const normalBytesPerNpcPath = 2
-
 
 		if ds1.Version.EncodesNPCExtraData() {
 			stream.Next(normalBytesPerNpcPath + 1).Bytes()
