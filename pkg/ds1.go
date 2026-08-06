@@ -1,11 +1,17 @@
 package pkg
 
 import (
+	"fmt"
+
 	"github.com/gravestench/bitstream"
 	"github.com/gravestench/mathlib"
 )
 
-const maxActNumber = 5
+const (
+	maxActNumber    = 5
+	maxMapDimension = 4096
+	maxRecordCount  = 1 << 20
+)
 
 // DS1 represents the "stamp" data that is used to build up maps.
 type DS1 struct {
@@ -54,6 +60,10 @@ func FromBytes(fileData []byte) (ds1 *DS1, err error) {
 	// minimum of 1
 	ds1.Width++
 	ds1.Height++
+	if ds1.Width <= 0 || ds1.Height <= 0 || ds1.Width > maxMapDimension || ds1.Height > maxMapDimension ||
+		int64(ds1.Width)*int64(ds1.Height) > maxRecordCount {
+		return nil, fmt.Errorf("invalid map dimensions %dx%d", ds1.Width, ds1.Height)
+	}
 
 	if ds1.Version.EncodesAct() {
 		if ds1.Act, err = stream.Next(4).Bytes().AsInt32(); err != nil {
@@ -76,6 +86,9 @@ func FromBytes(fileData []byte) (ds1 *DS1, err error) {
 		numberOfFiles, err := stream.Next(4).Bytes().AsInt32()
 		if err != nil {
 			return nil, err
+		}
+		if numberOfFiles < 0 || numberOfFiles > maxRecordCount {
+			return nil, fmt.Errorf("invalid file count %d", numberOfFiles)
 		}
 
 		ds1.Files = make([]string, numberOfFiles)
@@ -115,6 +128,14 @@ func FromBytes(fileData []byte) (ds1 *DS1, err error) {
 		} else {
 			ds1.NumberOfFloors = 1
 		}
+	}
+	if ds1.Version.EncodesSimpleLayers() {
+		ds1.NumberOfWalls = 1
+		ds1.NumberOfFloors = 1
+		ds1.NumberOfSubstitutionLayers = 1
+	}
+	if ds1.NumberOfWalls < 0 || ds1.NumberOfWalls > 16 || ds1.NumberOfFloors < 0 || ds1.NumberOfFloors > 16 {
+		return nil, fmt.Errorf("invalid layer counts: %d walls, %d floors", ds1.NumberOfWalls, ds1.NumberOfFloors)
 	}
 
 	layerStream := ds1.setupStreamLayerTypes()
@@ -156,6 +177,9 @@ func (ds1 *DS1) loadObjects(br *bitstream.Reader) error {
 		if err != nil {
 			return err
 		}
+		if numberOfObjects < 0 || numberOfObjects > maxRecordCount {
+			return fmt.Errorf("invalid object count %d", numberOfObjects)
+		}
 
 		ds1.Objects = make([]Object, numberOfObjects)
 
@@ -193,6 +217,9 @@ func (ds1 *DS1) loadSubstitutions(stream *bitstream.Reader) (err error) {
 	numberOfSubGroups, err := stream.Next(4).Bytes().AsInt32()
 	if err != nil {
 		return err
+	}
+	if numberOfSubGroups < 0 || numberOfSubGroups > maxRecordCount {
+		return fmt.Errorf("invalid substitution group count %d", numberOfSubGroups)
 	}
 
 	ds1.SubstitutionGroups = make([]SubstitutionGroup, numberOfSubGroups)
@@ -269,6 +296,9 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
 	numberOfNpcs, err := stream.Next(4).Bytes().AsInt32()
 	if err != nil {
 		return err
+	}
+	if numberOfNpcs < 0 || numberOfNpcs > maxRecordCount {
+		return fmt.Errorf("invalid NPC count %d", numberOfNpcs)
 	}
 
 	for npcIdx := 0; npcIdx < int(numberOfNpcs); npcIdx++ {

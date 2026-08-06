@@ -70,6 +70,15 @@ The DS1 transcoder package offers the following features:
 - Extract information about the DS1's version, width, height, act, and layer types.
 - Access objects, tiles, substitution groups, and other relevant data from the DS1 file.
 
+## Command-line tools
+
+```shell
+go install ./cmd/ds1-info
+ds1-info path/to/map.ds1
+```
+
+`ds1-info` validates and decodes a map stamp, then writes its dimensions, layer counts, object count, substitutions, and referenced files as JSON.
+
 <!-- CONTRIBUTING -->
 ## Contributing
 
