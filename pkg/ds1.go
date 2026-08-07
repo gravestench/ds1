@@ -185,11 +185,21 @@ func (ds1 *DS1) loadObjects(br *bitstream.Reader) error {
 
 		for objIdx := 0; objIdx < int(numberOfObjects); objIdx++ {
 			newObject := Object{}
-			newObject.Type, err = br.Next(4).Bytes().AsInt32()
-			newObject.ID, err = br.Next(4).Bytes().AsInt32()
-			newObject.X, err = br.Next(4).Bytes().AsInt32()
-			newObject.Y, err = br.Next(4).Bytes().AsInt32()
-			newObject.Flags, err = br.Next(4).Bytes().AsInt32()
+			if newObject.Type, err = br.Next(4).Bytes().AsInt32(); err != nil {
+				return fmt.Errorf("object %d type: %w", objIdx, err)
+			}
+			if newObject.ID, err = br.Next(4).Bytes().AsInt32(); err != nil {
+				return fmt.Errorf("object %d ID: %w", objIdx, err)
+			}
+			if newObject.X, err = br.Next(4).Bytes().AsInt32(); err != nil {
+				return fmt.Errorf("object %d X: %w", objIdx, err)
+			}
+			if newObject.Y, err = br.Next(4).Bytes().AsInt32(); err != nil {
+				return fmt.Errorf("object %d Y: %w", objIdx, err)
+			}
+			if newObject.Flags, err = br.Next(4).Bytes().AsInt32(); err != nil {
+				return fmt.Errorf("object %d flags: %w", objIdx, err)
+			}
 
 			ds1.Objects[objIdx] = newObject
 		}
@@ -226,11 +236,23 @@ func (ds1 *DS1) loadSubstitutions(stream *bitstream.Reader) (err error) {
 
 	for subIdx := 0; subIdx < int(numberOfSubGroups); subIdx++ {
 		newSub := SubstitutionGroup{}
-		newSub.TileX, err = stream.Next(4).Bytes().AsInt32()
-		newSub.TileY, err = stream.Next(4).Bytes().AsInt32()
-		newSub.WidthInTiles, err = stream.Next(4).Bytes().AsInt32()
-		newSub.HeightInTiles, err = stream.Next(4).Bytes().AsInt32()
-		newSub.Unknown, err = stream.Next(4).Bytes().AsInt32()
+		if newSub.TileX, err = stream.Next(4).Bytes().AsInt32(); err != nil {
+			return err
+		}
+		if newSub.TileY, err = stream.Next(4).Bytes().AsInt32(); err != nil {
+			return err
+		}
+		if newSub.WidthInTiles, err = stream.Next(4).Bytes().AsInt32(); err != nil {
+			return err
+		}
+		if newSub.HeightInTiles, err = stream.Next(4).Bytes().AsInt32(); err != nil {
+			return err
+		}
+		if ds1.Version.EncodesSubstitutionGroupExtra() {
+			if newSub.Unknown, err = stream.Next(4).Bytes().AsInt32(); err != nil {
+				return err
+			}
+		}
 
 		ds1.SubstitutionGroups[subIdx] = newSub
 	}
@@ -306,6 +328,9 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
 		if err != nil {
 			return err
 		}
+		if numPaths < 0 || numPaths > maxRecordCount {
+			return fmt.Errorf("invalid NPC path count %d", numPaths)
+		}
 
 		npcX, err := stream.Next(4).Bytes().AsInt32()
 		if err != nil {
@@ -334,12 +359,13 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
 			continue
 		}
 
-		const normalBytesPerNpcPath = 2
-
+		const dwordBytes = 4
+		dwordsPerPath := 2
 		if ds1.Version.EncodesNPCExtraData() {
-			stream.Next(normalBytesPerNpcPath + 1).Bytes()
-		} else {
-			stream.Next(normalBytesPerNpcPath).Bytes()
+			dwordsPerPath++
+		}
+		if _, err := stream.Next(int(numPaths) * dwordsPerPath * dwordBytes).Bytes().AsBytes(); err != nil {
+			return fmt.Errorf("skip %d paths for unmatched NPC at (%d,%d): %w", numPaths, npcX, npcY, err)
 		}
 	}
 

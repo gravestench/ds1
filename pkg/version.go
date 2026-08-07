@@ -8,6 +8,7 @@ const (
 	versionEncodesAct                = 8
 	versionEncodesSubstitutionLayers = 10
 	versionEncodesSubstitutionGroups = 12
+	versionEncodesSubstitutionExtra  = 13
 	versionEncodesNpcs               = 14
 	versionEncodesNpcExtraData       = 15
 	versionHasUnknownBytes2          = 18
@@ -44,6 +45,10 @@ func (v Version) EncodesWallLayers() bool {
 
 func (v Version) EncodesSubstitutionGroups() bool {
 	return v >= versionEncodesSubstitutionGroups
+}
+
+func (v Version) EncodesSubstitutionGroupExtra() bool {
+	return v >= versionEncodesSubstitutionExtra
 }
 
 func (v Version) HasUnknownBytes2() bool {
