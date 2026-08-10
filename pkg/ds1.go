@@ -1,7 +1,9 @@
 package pkg
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 
 	"github.com/gravestench/bitstream"
 	"github.com/gravestench/mathlib"
@@ -33,7 +35,15 @@ type DS1 struct {
 
 // FromBytes loads the specified DS1 file
 func FromBytes(fileData []byte) (ds1 *DS1, err error) {
-	stream := bitstream.NewReader().FromBytes(fileData...)
+	return FromReader(bytes.NewReader(fileData))
+}
+
+// FromReader incrementally decodes a forward-only DS1 stream.
+func FromReader(source io.Reader) (ds1 *DS1, err error) {
+	if source == nil {
+		return nil, fmt.Errorf("ds1: nil reader")
+	}
+	stream := bitstream.NewStreamReader(source)
 
 	ds1 = &DS1{
 		Act:                        1,
@@ -171,7 +181,7 @@ func FromBytes(fileData []byte) (ds1 *DS1, err error) {
 	return ds1, nil
 }
 
-func (ds1 *DS1) loadObjects(br *bitstream.Reader) error {
+func (ds1 *DS1) loadObjects(br *bitstream.StreamReader) error {
 	if ds1.Version >= 2 { //nolint:gomnd // Version number
 		numberOfObjects, err := br.Next(4).Bytes().AsInt32()
 		if err != nil {
@@ -210,7 +220,7 @@ func (ds1 *DS1) loadObjects(br *bitstream.Reader) error {
 	return nil
 }
 
-func (ds1 *DS1) loadSubstitutions(stream *bitstream.Reader) (err error) {
+func (ds1 *DS1) loadSubstitutions(stream *bitstream.StreamReader) (err error) {
 	ds1.SubstitutionGroups = make([]SubstitutionGroup, 0)
 
 	hasSubType := ds1.SubstitutionType == 1 || ds1.SubstitutionType == 2
@@ -310,7 +320,7 @@ func (ds1 *DS1) setupStreamLayerTypes() []LayerStreamType {
 	return layerStream
 }
 
-func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
+func (ds1 *DS1) loadNPCs(stream *bitstream.StreamReader) (err error) {
 	if !ds1.Version.EncodesNPCs() {
 		return nil
 	}
@@ -372,7 +382,7 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.Reader) (err error) {
 	return nil
 }
 
-func (ds1 *DS1) loadNpcPaths(br *bitstream.Reader, objIdx, numPaths int) (err error) {
+func (ds1 *DS1) loadNpcPaths(br *bitstream.StreamReader, objIdx, numPaths int) (err error) {
 	if ds1.Objects[objIdx].Paths == nil {
 		ds1.Objects[objIdx].Paths = make([]Path, numPaths)
 	}
@@ -406,7 +416,7 @@ func (ds1 *DS1) loadNpcPaths(br *bitstream.Reader, objIdx, numPaths int) (err er
 	return nil
 }
 
-func (ds1 *DS1) loadLayerStreams(stream *bitstream.Reader, layerStream []LayerStreamType) (err error) {
+func (ds1 *DS1) loadLayerStreams(stream *bitstream.StreamReader, layerStream []LayerStreamType) (err error) {
 	var dirLookup = []int32{
 		0x00, 0x01, 0x02, 0x01, 0x02, 0x03, 0x03, 0x05, 0x05, 0x06,
 		0x06, 0x07, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
