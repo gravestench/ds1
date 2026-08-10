@@ -1,6 +1,8 @@
 package ds1
 
 import (
+	"io"
+
 	"github.com/gravestench/ds1/pkg"
 )
 
@@ -21,3 +23,5 @@ type (
 func FromBytes(data []byte) (*DS1, error) {
 	return pkg.FromBytes(data)
 }
+
+func FromReader(source io.Reader) (*DS1, error) { return pkg.FromReader(source) }
