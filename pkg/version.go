@@ -1,9 +1,13 @@
 package pkg
 
 const (
+	// LatestVersion is the canonical version written by DS1Edit.
+	LatestVersion  Version = 18
+	minimumVersion Version = 1
+
 	versionEncodesFiles              = 3
 	versionEncodesFloors             = 4
-	versionSimpleLayersHigh          = 4 // up to v4, a ds1 only had 1 of each layer type
+	versionSimpleLayersHigh          = 4 // Before v4, a DS1 had one of each layer type.
 	versionEncodesWalls              = 16
 	versionEncodesAct                = 8
 	versionEncodesSubstitutionLayers = 10
@@ -19,6 +23,11 @@ const (
 
 type Version int32
 
+// Supported reports whether the version is understood by this codec.
+func (v Version) Supported() bool {
+	return v >= minimumVersion && v <= LatestVersion
+}
+
 func (v Version) EncodesAct() bool {
 	return v >= versionEncodesAct
 }
@@ -29,6 +38,14 @@ func (v Version) EncodesSubstitutionLayers() bool {
 
 func (v Version) EncodesFiles() bool {
 	return v >= versionEncodesFiles
+}
+
+func (v Version) EncodesObjectFlags() bool {
+	return v >= 6
+}
+
+func (v Version) EncodesDirectOrientations() bool {
+	return v >= 7
 }
 
 func (v Version) HasUnknownBytes1() bool {

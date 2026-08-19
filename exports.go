@@ -20,8 +20,14 @@ type (
 	WallRecord         = pkg.WallRecord
 )
 
+const LatestVersion = pkg.LatestVersion
+
 func FromBytes(data []byte) (*DS1, error) {
 	return pkg.FromBytes(data)
 }
 
 func FromReader(source io.Reader) (*DS1, error) { return pkg.FromReader(source) }
+
+func Encode(value *DS1) ([]byte, error) { return value.Encode() }
+
+func EncodeTo(destination io.Writer, value *DS1) error { return value.EncodeTo(destination) }
