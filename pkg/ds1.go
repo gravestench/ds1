@@ -19,8 +19,11 @@ const (
 type DS1 struct {
 	Files                      []string            // FilePtr table of file string pointers
 	Objects                    []Object            // Objects
+	NPCPathOrder               []int               // Object indexes in serialized NPC-path record order
 	Tiles                      [][]TileRecord      // The tile data for the DS1
 	SubstitutionGroups         []SubstitutionGroup // Substitution groups for the DS1
+	HeaderUnknown              [2]uint32           // Preserved header dwords used by versions 9 through 13
+	SubstitutionUnknown        uint32              // Preserved dword before substitution groups in version 18
 	Version                                        // The version of the DS1
 	Width                      int32               // Width of map, in # of tiles
 	Height                     int32               // Height of map, in # of tiles
@@ -54,9 +57,12 @@ func FromReader(source io.Reader) (ds1 *DS1, err error) {
 	}
 
 	if v, err := stream.Next(4).Bytes().AsInt32(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ds1: version: %w", err)
 	} else {
 		ds1.Version = Version(v)
+	}
+	if !ds1.Version.Supported() {
+		return nil, fmt.Errorf("ds1: unsupported version %d", ds1.Version)
 	}
 
 	if ds1.Width, err = stream.Next(4).Bytes().AsInt32(); err != nil {
@@ -76,8 +82,13 @@ func FromReader(source io.Reader) (ds1 *DS1, err error) {
 	}
 
 	if ds1.Version.EncodesAct() {
-		if ds1.Act, err = stream.Next(4).Bytes().AsInt32(); err != nil {
-			return nil, err
+		storedAct, readErr := stream.Next(4).Bytes().AsInt32()
+		if readErr != nil {
+			return nil, readErr
+		}
+		ds1.Act = storedAct + 1
+		if ds1.Act < 1 || ds1.Act > maxActNumber {
+			return nil, fmt.Errorf("invalid act %d", ds1.Act)
 		}
 	}
 
@@ -122,8 +133,11 @@ func FromReader(source io.Reader) (ds1 *DS1, err error) {
 	}
 
 	if ds1.Version.HasUnknownBytes1() {
-		const unknownBytes1Length = 8
-		stream.Next(unknownBytes1Length).Bytes() // skipping
+		for index := range ds1.HeaderUnknown {
+			if ds1.HeaderUnknown[index], err = stream.Next(4).Bytes().AsUInt32(); err != nil {
+				return nil, fmt.Errorf("header unknown dword %d: %w", index, err)
+			}
+		}
 	}
 
 	if ds1.Version.EncodesFloorLayers() {
@@ -144,7 +158,7 @@ func FromReader(source io.Reader) (ds1 *DS1, err error) {
 		ds1.NumberOfFloors = 1
 		ds1.NumberOfSubstitutionLayers = 1
 	}
-	if ds1.NumberOfWalls < 0 || ds1.NumberOfWalls > 16 || ds1.NumberOfFloors < 0 || ds1.NumberOfFloors > 16 {
+	if ds1.NumberOfWalls < 0 || ds1.NumberOfWalls > 4 || ds1.NumberOfFloors < 0 || ds1.NumberOfFloors > 2 {
 		return nil, fmt.Errorf("invalid layer counts: %d walls, %d floors", ds1.NumberOfWalls, ds1.NumberOfFloors)
 	}
 
@@ -207,8 +221,10 @@ func (ds1 *DS1) loadObjects(br *bitstream.StreamReader) error {
 			if newObject.Y, err = br.Next(4).Bytes().AsInt32(); err != nil {
 				return fmt.Errorf("object %d Y: %w", objIdx, err)
 			}
-			if newObject.Flags, err = br.Next(4).Bytes().AsInt32(); err != nil {
-				return fmt.Errorf("object %d flags: %w", objIdx, err)
+			if ds1.Version.EncodesObjectFlags() {
+				if newObject.Flags, err = br.Next(4).Bytes().AsInt32(); err != nil {
+					return fmt.Errorf("object %d flags: %w", objIdx, err)
+				}
 			}
 
 			ds1.Objects[objIdx] = newObject
@@ -231,7 +247,9 @@ func (ds1 *DS1) loadSubstitutions(stream *bitstream.StreamReader) (err error) {
 	}
 
 	if ds1.Version.HasUnknownBytes2() {
-		stream.Next(4).Bytes() // skip int32
+		if ds1.SubstitutionUnknown, err = stream.Next(4).Bytes().AsUInt32(); err != nil {
+			return fmt.Errorf("substitution preamble: %w", err)
+		}
 	}
 
 	numberOfSubGroups, err := stream.Next(4).Bytes().AsInt32()
@@ -243,6 +261,7 @@ func (ds1 *DS1) loadSubstitutions(stream *bitstream.StreamReader) (err error) {
 	}
 
 	ds1.SubstitutionGroups = make([]SubstitutionGroup, numberOfSubGroups)
+	ds1.SubstitutionGroupsNum = numberOfSubGroups
 
 	for subIdx := 0; subIdx < int(numberOfSubGroups); subIdx++ {
 		newSub := SubstitutionGroup{}
@@ -362,6 +381,7 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.StreamReader) (err error) {
 		}
 
 		if objIdx > -1 {
+			ds1.NPCPathOrder = append(ds1.NPCPathOrder, objIdx)
 			if err = ds1.loadNpcPaths(stream, objIdx, int(numPaths)); err != nil {
 				return err
 			}
@@ -383,9 +403,10 @@ func (ds1 *DS1) loadNPCs(stream *bitstream.StreamReader) (err error) {
 }
 
 func (ds1 *DS1) loadNpcPaths(br *bitstream.StreamReader, objIdx, numPaths int) (err error) {
-	if ds1.Objects[objIdx].Paths == nil {
-		ds1.Objects[objIdx].Paths = make([]Path, numPaths)
+	if ds1.Objects[objIdx].Paths != nil {
+		return fmt.Errorf("duplicate NPC path record for object %d", objIdx)
 	}
+	ds1.Objects[objIdx].Paths = make([]Path, numPaths)
 
 	for pathIdx := 0; pathIdx < numPaths; pathIdx++ {
 		newPath := Path{}
@@ -417,12 +438,6 @@ func (ds1 *DS1) loadNpcPaths(br *bitstream.StreamReader, objIdx, numPaths int) (
 }
 
 func (ds1 *DS1) loadLayerStreams(stream *bitstream.StreamReader, layerStream []LayerStreamType) (err error) {
-	var dirLookup = []int32{
-		0x00, 0x01, 0x02, 0x01, 0x02, 0x03, 0x03, 0x05, 0x05, 0x06,
-		0x06, 0x07, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E,
-		0x0F, 0x10, 0x11, 0x12, 0x14,
-	}
-
 	for lIdx := range layerStream {
 		layerStreamType := layerStream[lIdx]
 
@@ -436,40 +451,29 @@ func (ds1 *DS1) loadLayerStreams(stream *bitstream.StreamReader, layerStream []L
 				switch layerStreamType {
 				case LayerStreamWall1, LayerStreamWall2, LayerStreamWall3, LayerStreamWall4:
 					wallIndex := int(layerStreamType) - int(LayerStreamWall1)
-					ds1.Tiles[y][x].Walls[wallIndex].Prop1 = byte(bits & 0x000000FF)            //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Walls[wallIndex].Sequence = byte((bits & 0x00003F00) >> 8)  //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Walls[wallIndex].Unknown1 = byte((bits & 0x000FC000) >> 14) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Walls[wallIndex].Style = byte((bits & 0x03F00000) >> 20)    //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Walls[wallIndex].Unknown2 = byte((bits & 0x7C000000) >> 26) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Walls[wallIndex].Hidden = byte((bits&0x80000000)>>31) > 0   //nolint:gomnd // Bitmask
+					ds1.Tiles[y][x].Walls[wallIndex].SetPacked(bits)
 				case LayerStreamOrientation1, LayerStreamOrientation2,
 					LayerStreamOrientation3, LayerStreamOrientation4:
 					wallIndex := int(layerStreamType) - int(LayerStreamOrientation1)
-					c := int32(bits & 0x000000FF) //nolint:gomnd // Bitmask
+					wall := &ds1.Tiles[y][x].Walls[wallIndex]
+					rawOrientation := byte(bits)
+					orientation := rawOrientation
 
-					if ds1.Version < 7 { //nolint:gomnd // Version number
-						if c < int32(len(dirLookup)) {
-							c = dirLookup[c]
+					if !ds1.Version.EncodesDirectOrientations() {
+						if int(rawOrientation) < len(legacyOrientationLookup) {
+							orientation = legacyOrientationLookup[rawOrientation]
 						}
 					}
 
-					ds1.Tiles[y][x].Walls[wallIndex].Type = TileType(c)
-					ds1.Tiles[y][x].Walls[wallIndex].Zero = byte((bits & 0xFFFFFF00) >> 8) //nolint:gomnd // Bitmask
+					wall.Type = TileType(orientation)
+					wall.RawOrientation = rawOrientation
+					wall.OrientationUnknown = bits & 0xffffff00
+					wall.Zero = byte(bits >> 8)
 				case LayerStreamFloor1, LayerStreamFloor2:
 					floorIndex := int(layerStreamType) - int(LayerStreamFloor1)
-					ds1.Tiles[y][x].Floors[floorIndex].Prop1 = byte(bits & 0x000000FF)            //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Floors[floorIndex].Sequence = byte((bits & 0x00003F00) >> 8)  //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Floors[floorIndex].Unknown1 = byte((bits & 0x000FC000) >> 14) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Floors[floorIndex].Style = byte((bits & 0x03F00000) >> 20)    //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Floors[floorIndex].Unknown2 = byte((bits & 0x7C000000) >> 26) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Floors[floorIndex].Hidden = byte((bits&0x80000000)>>31) > 0   //nolint:gomnd // Bitmask
+					ds1.Tiles[y][x].Floors[floorIndex].SetPacked(bits)
 				case LayerStreamShadow:
-					ds1.Tiles[y][x].Shadows[0].Prop1 = byte(bits & 0x000000FF)            //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Shadows[0].Sequence = byte((bits & 0x00003F00) >> 8)  //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Shadows[0].Unknown1 = byte((bits & 0x000FC000) >> 14) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Shadows[0].Style = byte((bits & 0x03F00000) >> 20)    //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Shadows[0].Unknown2 = byte((bits & 0x7C000000) >> 26) //nolint:gomnd // Bitmask
-					ds1.Tiles[y][x].Shadows[0].Hidden = byte((bits&0x80000000)>>31) > 0   //nolint:gomnd // Bitmask
+					ds1.Tiles[y][x].Shadows[0].SetPacked(bits)
 				case LayerStreamSubstitute:
 					ds1.Tiles[y][x].Substitutions[0].Unknown = bits
 				}

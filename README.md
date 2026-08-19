@@ -52,21 +52,33 @@ importing it as follows:
 import "github.com/gravestench/ds1"
 ```
 
-#### Load DS1 File
+#### Load and save a DS1 file
 To load a DS1 file from a byte slice, use the `FromBytes` function:
 
 ```golang
 fileData := // Load your DS1 file data here as a byte slice
-ds1, err := ds1.FromBytes(fileData)
+stamp, err := ds1.FromBytes(fileData)
 if err != nil {
     // Handle error
 }
-// Use the ds1 object to access the DS1 file data
+
+// Preserve the source version, including legacy layouts.
+encoded, err := stamp.Encode()
+if err != nil {
+    // Handle error
+}
 ```
+
+For a newly constructed model, use `ds1.LatestVersion` to select the canonical
+v18 layout emitted by DS1Edit. Layer counts and tile slices must match the
+selected version; the encoder reports data that the target version cannot
+represent instead of silently discarding it.
 
 ### Features
 The DS1 transcoder package offers the following features:
-- Efficiently read and parse DS1 image files.
+- Incrementally read and validate DS1 files.
+- Encode DS1 versions 1 through 18, including DS1Edit's canonical v18 layout.
+- Preserve legacy orientation values, header dwords, substitution metadata, and NPC path ordering during round trips.
 - Extract information about the DS1's version, width, height, act, and layer types.
 - Access objects, tiles, substitution groups, and other relevant data from the DS1 file.
 
