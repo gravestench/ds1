@@ -165,6 +165,7 @@ func TestEncodeRejectsUnrepresentableModelsBeforeWriting(t *testing.T) {
 			for x := range value.Tiles[0] {
 				value.Tiles[0][x].Floors = value.Tiles[0][x].Floors[:1]
 			}
+			value.Objects[0].Paths[0].Action = 2
 		}, "action not supported"},
 		{"fractional path", func(value *DS1) { value.Objects[0].Paths[0].Position.X = 1.5 }, "not an int32"},
 		{"ambiguous path owner", func(value *DS1) {

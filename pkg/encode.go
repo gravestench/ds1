@@ -206,7 +206,11 @@ func (ds1 *DS1) validateForEncoding() (*encodeLayout, error) {
 			if _, err := pathCoordinate(path.Position.Y); err != nil {
 				return nil, fmt.Errorf("ds1: object %d path %d Y: %w", index, pathIndex, err)
 			}
-			if !ds1.Version.EncodesNPCExtraData() && path.Action != 0 {
+			// Version 14 does not serialize action. DS1Edit reads its paths as
+			// action 1, while a newly constructed model may still carry zero.
+			// Both represent the same v14 bytes; every other action would be
+			// silently lost and remains invalid.
+			if !ds1.Version.EncodesNPCExtraData() && path.Action != 0 && path.Action != 1 {
 				return nil, fmt.Errorf("ds1: object %d path %d has an action not supported by version %d", index, pathIndex, ds1.Version)
 			}
 			if int64(path.Action) < math.MinInt32 || int64(path.Action) > math.MaxInt32 {

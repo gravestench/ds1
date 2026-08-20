@@ -409,7 +409,10 @@ func (ds1 *DS1) loadNpcPaths(br *bitstream.StreamReader, objIdx, numPaths int) (
 	ds1.Objects[objIdx].Paths = make([]Path, numPaths)
 
 	for pathIdx := 0; pathIdx < numPaths; pathIdx++ {
-		newPath := Path{}
+		// Version 14 serializes no action dword. DS1Edit assigns the
+		// historical default action 1 when loading those paths, so preserve
+		// that editor-visible semantic instead of leaking Go's zero value.
+		newPath := Path{Action: 1}
 		x, err := br.Next(4).Bytes().AsInt32()
 		if err != nil {
 			return err
